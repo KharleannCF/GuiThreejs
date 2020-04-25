@@ -1,11 +1,16 @@
 import * as THREE from 'three';
-
-export const interactiveElements = [];
+//Array for the elements of the slider
 export let dragSlider = [];
+//Elements that can be clicked or changed via mouse
+const interactiveElements = [];
+//Boolean for the dragEvent
 let dragStart = false;
-let dragspeed = 5;
+
+//vector for the mouse position in the screen
 let mouse = new THREE.Vector2(1,1);
+//The element that have been intersected by the mouse
 let INTERSECTED;
+//caster for the mouse
 let raycaster = new THREE.Raycaster();
 
 let helper = {
@@ -17,6 +22,11 @@ let helper = {
     }
 };
 
+
+//Receive a config JSON, put the initial value of every mayor option
+//provided by ThreeJS for the MeshPhongMaterial constructor
+//in case there was a value just put it back inside
+//Also put a random color in case there was no color defined
 function verifyPhongMaterial(conf){
 	if (!helper.isDefined(conf.color)) {
 	let color = new THREE.Color(0xFFFFFF);
@@ -37,7 +47,35 @@ function verifyPhongMaterial(conf){
 	return conf;
 }
 
+//Receive a JSON conf for a boxGeometry, put 1 in every parameter of the contructor
+function verifyBoxGeometry(conf){
+	conf.width = helper.isDefined(conf.width) ? conf.width : 1;
+	conf.height = helper.isDefined(conf.height) ? conf.height : 1;
+	conf.length = helper.isDefined(conf.length) ? conf.length : 1;
+	return conf;
+}
 
+
+//Receive an event and a camera and change the mouse value
+//in case there is an intersection with a interactiveElement
+//return said intersection event
+export function verifyIntersect(event, camera){
+	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+	raycaster.setFromCamera(mouse,camera);
+	let intersects = raycaster.intersectObjects(interactiveElements);
+	if (intersects.length > 0) {
+		return intersects[0];
+	}else {
+		return null	
+	}
+}
+
+
+
+//Creation of the boxButton, receive a string to put inside the box
+//the position inside a vector and 2 Json config for the materials of the text and the box
+//this return an object 3d with the box and text inside
 export function createBoxButton(text, position, textConf, conf){
 position = (helper.isDefined(position)) ? position : []
 const button = new THREE.Object3D();
@@ -47,7 +85,8 @@ button.position.copy(position);
 return button;
 }
 
-
+//for performance reasons I decided to promisify the loader of the font and the creation of the box
+//this receive the parent element of the box and the text an put them inside
 function createTextBox(parent, text, textConf, conf){
 	const loader = new THREE.FontLoader();
 	// promisify font loading
@@ -110,13 +149,9 @@ function createTextBox(parent, text, textConf, conf){
   }
 	doit(parent, text, textConf, conf);
 }
-function verifyBoxGeometry(conf){
-	conf.width = helper.isDefined(conf.width) ? conf.width : 1;
-	conf.height = helper.isDefined(conf.height) ? conf.height : 1;
-	conf.length = helper.isDefined(conf.length) ? conf.length : 1;
-	return conf;
-}
 
+//this function create the slider, receive a position for the slider
+//3 conf Json, two for the materials and one for the size
 export function createSlider(position, conf, controlConf, geometryConf){
 	conf = helper.isDefined(conf) ? conf : {};
 	controlConf = helper.isDefined(controlConf) ? controlConf : {};
@@ -167,20 +202,8 @@ export function createSlider(position, conf, controlConf, geometryConf){
 }
 
 
-
-
-export function verifyIntersect(event, camera){
-	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-	raycaster.setFromCamera(mouse,camera);
-	let intersects = raycaster.intersectObjects(interactiveElements);
-	if (intersects.length > 0) {
-		return intersects[0];
-	}else {
-		return null	
-	}
-}
-
+//receive an objective, and scale it parent by 1.2 factor
+//only in case its the same objective as before
 export function bump(objective){
 	if (INTERSECTED != objective ) {
 		INTERSECTED =  objective.object.parent;
@@ -192,7 +215,8 @@ export function bump(objective){
 	}
 }
 
-
+//if intersected is defined or not null set it
+//to normal and nullify it
 export function bumpStop(){
 	if (INTERSECTED){
 		INTERSECTED.scale.set(1,1,1);
@@ -200,29 +224,34 @@ export function bumpStop(){
 	}
 }
 
-
+//Receive a delta and a camera and move a slide according to mouse position in the world
 export function moveSlide(delta, camera){
+	//basic speed for the slider box
+	let dragspeed = 10;
 	let slide = dragSlider[0];
 	let bar = dragSlider[1];
+	//this section is to get the mouse pointer in the scene
 	let vector = new THREE.Vector3(mouse.x,mouse.y,0.5);
 	vector.unproject(camera);
 	let dir = vector.sub(camera.position).normalize();
 	let distance = -camera.position.z/dir.z;
 	let pos = camera.position.clone().add(dir.multiplyScalar(distance));
 	pos.x -= bar.position.x;
+	//actual position of the slider
 	let posAct =  slide.position.x;
 	let dis = Math.pow((pos.x - posAct)*(pos.x - posAct), 1/2);
 	if( !((posAct < bar.Min && posAct > pos.x) || ( posAct < pos.x && posAct > bar.Max)) ){
-		if(dis > 0.005 ) dragspeed = 0;
-		if(dis > 0.01) dragspeed = 0.1;
-		if(dis > 0.05) dragspeed = 10;
-		if(dis > 5) dragspeed = 20;
-		if(dis > 10) dragspeed = 30;
+		if(dis < 0.009 ) dragspeed = 0;
+		if(dis > 0.01) dragspeed = dragspeed/100;;
+		if(dis > 0.05) dragspeed = dragspeed*100;
+		if(dis > 5) dragspeed = dragspeed*2;
+		if(dis > 10) dragspeed = dragspeed*3;
 		if (posAct < pos.x) {
 			slide.position.x += dragspeed*delta;	
 		}else if (posAct > pos.x) {
 			slide.position.x -= dragspeed*delta
 		}
+		//value of the slide according to it position in the bar
 		slide.value = 100*slide.position.x/(bar.Max-bar.Min) + 50;
 		if (slide.value > 100) slide.value = 100;
 		if (slide.value < 0) slide.value = 0;

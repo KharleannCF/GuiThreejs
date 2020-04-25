@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 
 export const interactiveElements = [];
+export let dragSlider = [];
+let dragStart = false;
+let dragspeed = 5;
+let mouse = new THREE.Vector2(1,1);
+let INTERSECTED;
+let raycaster = new THREE.Raycaster();
 
 let helper = {
     isDefined : function(conf) {
@@ -156,5 +162,70 @@ export function createSlider(position, conf, controlConf, geometryConf){
 	mainBox.Max = mainBox.geometry.boundingBox.max.x;
 	mainBox.Min = mainBox.geometry.boundingBox.min.x;
 	mainBox.name = 'bar';
+	mainBox.position.copy(position);
 	return mainBox;
+}
+
+
+
+
+export function verifyIntersect(event, camera){
+	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+	raycaster.setFromCamera(mouse,camera);
+	let intersects = raycaster.intersectObjects(interactiveElements);
+	if (intersects.length > 0) {
+		return intersects[0];
+	}else {
+		return null	
+	}
+}
+
+export function bump(objective){
+	if (INTERSECTED != objective ) {
+		INTERSECTED =  objective.object.parent;
+		if (INTERSECTED) INTERSECTED.scale.set(1.1,1.1,1);
+		INTERSECTED.scale.set(1.2,1.2,1);
+	}else{
+		if (INTERSECTED) INTERSECTED.scale.set(1,1,1)
+		INTERSECTED = null;
+	}
+}
+
+
+export function bumpStop(){
+	if (INTERSECTED){
+		INTERSECTED.scale.set(1,1,1);
+		INTERSECTED = null;
+	}
+}
+
+
+export function moveSlide(delta, camera){
+	let slide = dragSlider[0];
+	let bar = dragSlider[1];
+	let vector = new THREE.Vector3(mouse.x,mouse.y,0.5);
+	vector.unproject(camera);
+	let dir = vector.sub(camera.position).normalize();
+	let distance = -camera.position.z/dir.z;
+	let pos = camera.position.clone().add(dir.multiplyScalar(distance));
+	pos.x -= bar.position.x;
+	let posAct =  slide.position.x;
+	let dis = Math.pow((pos.x - posAct)*(pos.x - posAct), 1/2);
+	if( !((posAct < bar.Min && posAct > pos.x) || ( posAct < pos.x && posAct > bar.Max)) ){
+		if(dis > 0.005 ) dragspeed = 0;
+		if(dis > 0.01) dragspeed = 0.1;
+		if(dis > 0.05) dragspeed = 10;
+		if(dis > 5) dragspeed = 20;
+		if(dis > 10) dragspeed = 30;
+		if (posAct < pos.x) {
+			slide.position.x += dragspeed*delta;	
+		}else if (posAct > pos.x) {
+			slide.position.x -= dragspeed*delta
+		}
+		slide.value = 100*slide.position.x/(bar.Max-bar.Min) + 50;
+		if (slide.value > 100) slide.value = 100;
+		if (slide.value < 0) slide.value = 0;
+	}
+	return slide.value;
 }
